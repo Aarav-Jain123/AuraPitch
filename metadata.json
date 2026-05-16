@@ -1,0 +1,6 @@
+{
+  "name": "AuraPitch",
+  "description": "Real-time AI coach for public speaking, interviews, and pitches. Analyzes tone, body language, and confidence using Gemini Flash.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
