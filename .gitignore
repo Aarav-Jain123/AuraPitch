@@ -6,3 +6,8 @@ coverage/
 *.log
 # .env*
 !.env.example
+.firebase/
+.agents/
+.firebaserc
+firebase.json
+skills-lock.json
