@@ -27,6 +27,12 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+      
+      - name: Setup vite
+        run: npm install -g --save-dev vite
+      
+      - name: Setup ESbuild
+        run: npm install -g esbuild
 
       - name: Build project
-        run: react-scripts build
+        run: vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs
