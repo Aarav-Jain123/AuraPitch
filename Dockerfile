@@ -8,10 +8,9 @@ RUN npm install
 
 COPY . .
 
-ENV PORT=3000
 ENV GEMINI_API_KEY="AIzaSyAJTjol2gmuJDlO0reQNSRSqb-eRKI67ac"
-ENV BASE_URL="https://aurapitch-b9dba.web.app/"
+ENV BASE_URL="https://aurapitch-231480891026.europe-west1.run.app/"
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["npm", "start"]
