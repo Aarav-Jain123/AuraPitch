@@ -11,7 +11,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 const httpServer = createServer(app);
-const PORT = 3000;
+const PORT = 443;
 
 const getGeminiKey = () => {
   const key = process.env.GEMINI_API_KEY || 
@@ -238,6 +238,6 @@ async function setupVite() {
 
 setupVite().then(() => {
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT} `);
   });
 });
