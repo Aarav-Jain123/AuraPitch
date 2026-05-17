@@ -11,7 +11,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 const httpServer = createServer(app);
-const PORT = 443;
+const PORT = process.env.PORT || 3000;
 
 const getGeminiKey = () => {
   const key = process.env.GEMINI_API_KEY;
