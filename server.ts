@@ -12,7 +12,7 @@ const server = createServer(app);
 const PORT = process.env.PORT || 3000;
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: process.env.GEMINI_API_KEY || geminiKEY,
 });
 
 const wss = new WebSocketServer({ server });
