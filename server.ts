@@ -10,7 +10,7 @@ import { geminiKEY } from "./api";
 const app = express();
 app.use(express.json());
 const httpServer = createServer(app);
-const PORT = 3000;
+const PORT = 8080;
 
 const getGeminiKey = () => {
   const key = process.env.GEMINI_API_KEY || geminiKEY
