@@ -14,13 +14,12 @@ const httpServer = createServer(app);
 const PORT = 443;
 
 const getGeminiKey = () => {
-  const key = process.env.GEMINI_API_KEY || 
-              process.env.GOOGLE_API_KEY || 
-              process.env.GENAI_API_KEY;
-              
-  if (!key || key === "REPLACE_WITH_YOUR_KEY" || key.trim() === "") {
+  const key = process.env.GEMINI_API_KEY;
+
+  if (!key || key.trim() === "") {
     return null;
   }
+
   return key;
 };
 
