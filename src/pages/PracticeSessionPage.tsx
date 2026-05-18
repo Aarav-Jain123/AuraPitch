@@ -284,7 +284,7 @@ export default function PracticeSessionPage() {
             ws.send(JSON.stringify({ video: base64 }));
           }
         }
-      }, 3000);
+      }, 8080);
 
       // Record real-time metrics for the final report
       metricsIntervalRef.current = setInterval(() => {
