@@ -13,11 +13,12 @@ const httpServer = createServer(app);
 const PORT = 8080;
 
 const getGeminiKey = () => {
-  const key = process.env.GEMINI_API_KEY || geminiKEY
-              
-  if (!key || key === geminiKEY || key.trim() === "") {
+  const key = process.env.GEMINI_API_KEY;
+
+  if (!key || key.trim() === "") {
     return null;
   }
+
   return key;
 };
 
