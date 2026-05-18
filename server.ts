@@ -12,15 +12,15 @@ app.use(express.json());
 const httpServer = createServer(app);
 const PORT = 8080;
 
-const getGeminiKey = () => {
+export function getGeminiKey(): string {
   const key = process.env.GEMINI_API_KEY;
 
-  if (!key || key.trim() === "") {
-    return null;
+  if (!key?.trim()) {
+    throw new Error("Missing GEMINI_API_KEY");
   }
 
   return key;
-};
+}
 
 const getGenAI = () => {
   const apiKey = getGeminiKey();
