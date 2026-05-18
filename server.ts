@@ -13,7 +13,7 @@ const httpServer = createServer(app);
 const PORT = 8080;
 
 export function getGeminiKey(): string {
-  const key = process.env.GEMINI_API_KEY;
+  const key = import.meta.env.GEMINI_API_KEY;
 
   if (!key?.trim()) {
     throw new Error("Missing GEMINI_API_KEY");
