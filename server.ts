@@ -6,16 +6,20 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { geminiKEY } from "./api";
 
-
 const app = express();
 app.use(express.json());
+
 const httpServer = createServer(app);
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
+
+// ======================
+// GEMINI CONFIG
+// ======================
 
 export function getGeminiKey(): string {
-  const key = import.meta.env.GEMINI_API_KEY;
+  const key = process.env.GEMINI_API_KEY || geminiKEY;
 
-  if (!key?.trim()) {
+  if (!key || !key.trim()) {
     throw new Error("Missing GEMINI_API_KEY");
   }
 
@@ -23,29 +27,35 @@ export function getGeminiKey(): string {
 }
 
 const getGenAI = () => {
-  const apiKey = getGeminiKey();
-  if (!apiKey) {
-    console.warn("Gemini API key is missing from environment variables.");
+  try {
+    const apiKey = getGeminiKey();
+    return new GoogleGenAI({ apiKey });
+  } catch (err) {
+    console.error("Gemini initialization failed:", err);
     return null;
   }
-  return new GoogleGenAI({ apiKey });
 };
 
-// Endpoint for generating session reports
+// ======================
+// REPORT ENDPOINT
+// ======================
+
 app.post("/api/generate-report", async (req, res) => {
   try {
     const { title, description, duration, metrics, transcripts } = req.body;
 
     const ai = getGenAI();
+
     if (!ai) {
-      return res.status(500).json({ 
-        error: "Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable in the application settings." 
+      return res.status(500).json({
+        error: "Gemini API key is not configured",
       });
     }
-    
-    // Format transcripts for the prompt
+
     const transcriptText = transcripts
-      ? transcripts.map((t: any) => `${t.type.toUpperCase()}: ${t.text}`).join('\n')
+      ? transcripts
+          .map((t: any) => `${t.type.toUpperCase()}: ${t.text}`)
+          .join("\n")
       : "No transcript available.";
 
     const prompt = `
@@ -64,178 +74,346 @@ app.post("/api/generate-report", async (req, res) => {
       {
         "aiSuggestions": [string, string, string, string],
         "scores": {
-          "tone": number (0-100),
-          "voice": number (0-100),
-          "visual": number (0-100)
+          "tone": number,
+          "voice": number,
+          "visual": number
         }
       }
 
       CRITICAL INSTRUCTIONS:
-      - Be brutally honest. If they were average, give them a C (70-79).
-      - Scores above 95 are extremely rare—only for world-class delivery.
-      - Suggestions should be actionable and professional based on the TRANSCRIPT and METRICS.
-      - If the metrics show pace fluctuations, mention it.
-      - Return ONLY the JSON.
+      - Be brutally honest.
+      - Scores above 95 are extremely rare.
+      - Return ONLY valid JSON.
     `;
 
-    // Perform session analysis
     const response = await ai.models.generateContent({
       model: "gemini-3.1-pro-preview",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
-        responseMimeType: "application/json"
-      }
+        responseMimeType: "application/json",
+      },
     });
-    
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (text) {
-      const report = JSON.parse(text.replace(/```json|```/g, "").trim());
-      res.json(report);
-    } else {
-      throw new Error("Invalid AI response format: no text content found");
+
+    const text =
+      response.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      throw new Error("No AI response text");
     }
+
+    const report = JSON.parse(
+      text.replace(/```json|```/g, "").trim()
+    );
+
+    res.json(report);
   } catch (error) {
     console.error("Report generation error:", error);
-    res.status(500).json({ error: "Failed to generate AI report" });
+
+    res.status(500).json({
+      error: "Failed to generate AI report",
+    });
   }
 });
 
-// WebSocket for Gemini Live
+// ======================
+// WEBSOCKET
+// ======================
+
 const wss = new WebSocketServer({ noServer: true });
 
 wss.on("connection", async (clientWs: WebSocket) => {
   console.log("Client connected to Gemini Live bridge");
+
   let session: any = null;
+
   const ai = getGenAI();
 
   if (!ai) {
-    console.error("WebSocket connection failed: Gemini API key missing");
-    clientWs.close(1008, "Gemini API key missing");
+    console.error("Gemini init failed");
+
+    clientWs.send(
+      JSON.stringify({
+        type: "error",
+        message: "Gemini initialization failed",
+      })
+    );
+
+    clientWs.close(1011, "Gemini init failed");
     return;
   }
 
   clientWs.on("message", async (data) => {
     try {
       const msg = JSON.parse(data.toString());
-      
+
+      // ======================
+      // SESSION INIT
+      // ======================
+
       if (msg.setup) {
         const { title, description } = msg.setup;
-        session = await ai.live.connect({
-          model: "gemini-3.1-pro-preview",
-          callbacks: {
-            onmessage: (message: LiveServerMessage) => {
-              // Handle audio
-              const audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-              if (audio) {
-                clientWs.send(JSON.stringify({ type: 'audio', data: audio }));
-              }
 
-              // Handle transcriptions
-              const modelTranscript = message.serverContent?.modelTurn?.parts?.[0]?.text;
-              if (modelTranscript) {
-                clientWs.send(JSON.stringify({ type: 'modelTranscript', data: modelTranscript }));
-              }
+        console.log("Initializing Gemini Live session...");
 
-              const userTranscript = (message as any).serverContent?.userTranscript;
-              if (userTranscript) {
-                 clientWs.send(JSON.stringify({ type: 'userTranscript', data: userTranscript }));
-              }
+        try {
+          session = await ai.live.connect({
+            model: "gemini-3.1-pro-preview",
 
-              if (message.serverContent?.interrupted) {
-                clientWs.send(JSON.stringify({ type: 'interrupted' }));
-              }
+            callbacks: {
+              onmessage: (message: LiveServerMessage) => {
+                try {
+                  const audio =
+                    message.serverContent?.modelTurn?.parts?.[0]
+                      ?.inlineData?.data;
+
+                  if (audio && clientWs.readyState === WebSocket.OPEN) {
+                    clientWs.send(
+                      JSON.stringify({
+                        type: "audio",
+                        data: audio,
+                      })
+                    );
+                  }
+
+                  const modelTranscript =
+                    message.serverContent?.modelTurn?.parts?.[0]
+                      ?.text;
+
+                  if (
+                    modelTranscript &&
+                    clientWs.readyState === WebSocket.OPEN
+                  ) {
+                    clientWs.send(
+                      JSON.stringify({
+                        type: "modelTranscript",
+                        data: modelTranscript,
+                      })
+                    );
+                  }
+
+                  const userTranscript = (message as any)
+                    ?.serverContent?.userTranscript;
+
+                  if (
+                    userTranscript &&
+                    clientWs.readyState === WebSocket.OPEN
+                  ) {
+                    clientWs.send(
+                      JSON.stringify({
+                        type: "userTranscript",
+                        data: userTranscript,
+                      })
+                    );
+                  }
+
+                  if (
+                    message.serverContent?.interrupted &&
+                    clientWs.readyState === WebSocket.OPEN
+                  ) {
+                    clientWs.send(
+                      JSON.stringify({
+                        type: "interrupted",
+                      })
+                    );
+                  }
+                } catch (callbackErr) {
+                  console.error(
+                    "Callback processing error:",
+                    callbackErr
+                  );
+                }
+              },
+
+              onerror: (err: any) => {
+                console.error("Gemini session error:", err);
+
+                if (clientWs.readyState === WebSocket.OPEN) {
+                  clientWs.send(
+                    JSON.stringify({
+                      type: "error",
+                      message: "Gemini realtime error",
+                    })
+                  );
+                }
+              },
             },
-          },
-          config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+
+            config: {
+              responseModalities: [Modality.AUDIO],
+
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: "Zephyr",
+                  },
+                },
+              },
+
+              // @ts-ignore
+              outputAudioTranscription: {},
+
+              // @ts-ignore
+              inputAudioTranscription: {},
+
+              systemInstruction: {
+                parts: [
+                  {
+                    text: `
+You are AuraPitch, a world-class Executive Communication Coach.
+
+YOUR MISSION:
+Transform the user into a high-impact speaker.
+
+SESSION TITLE:
+"${title}"
+
+SESSION CONTEXT:
+"${description}"
+
+COACHING STYLE:
+- highly specific
+- elite
+- demanding
+- concise
+- proactive
+
+Keep live interventions under 8 seconds.
+                    `,
+                  },
+                ],
+              },
             },
-            // @ts-ignore
-            outputAudioTranscription: {},
-            // @ts-ignore
-            inputAudioTranscription: {},
-            systemInstruction: {
-              parts: [{
-                text: `You are AuraPitch, a world-class Executive Communication Coach. 
-                
-                YOUR MISSION: Transform the user into a high-impact speaker for their session: "${title}".
-                CONTEXT: "${description}"
+          });
 
-                CRITICAL COACHING BEHAVIORS:
-                1. PROACTIVE & SPECIFIC: Don't just say "good job". Say "That opening hook about [Topic] was strong, but your pace accelerated during the second sentence. Breathe."
-                2. MICRO-INTERVENTIONS: If you hear a series of filler words (ums/ahs) or a sharp increase in pace, interject immediately with a brief, actionable correction (e.g., "Pause there. Reset your pace.").
-                3. BREVITY IS KEY: During the session, keep your verbal feedback under 8 seconds. Use short, punchy directives.
-                4. EYE CONTACT & POSTURE: You can see them. If they look down at notes too much or slouch, correct them: "Eyes up. Project to the back of the room."
-                5. TRANSITIONS: Coach them on their transitions. If they sound abrupt, suggest a "bridge" phrase.
+          console.log("Gemini Live connected");
 
-                REAL-TIME DATA GATHERING:
-                - Listen for: Certainty in voice, filler word density, vocal variety, and speaking rate.
-                - Watch for: Open vs. closed posture, eye contact consistency, and expressive hand gestures.
+          clientWs.send(
+            JSON.stringify({
+              type: "connected",
+            })
+          );
+        } catch (connectErr) {
+          console.error(
+            "Gemini Live connection failed:",
+            connectErr
+          );
 
-                TONE: authoritative, encouraging but demanding, elite, and intensely focused on performance excellence.`
-              }]
-            },
-          },
-        });
-        console.log("Gemini session initialized with context");
+          clientWs.send(
+            JSON.stringify({
+              type: "error",
+              message: "Failed to initialize Gemini Live",
+            })
+          );
+
+          clientWs.close(1011, "Gemini Live init failed");
+        }
+
         return;
       }
+
+      // ======================
+      // STREAM INPUTS
+      // ======================
 
       if (!session) return;
 
       if (msg.audio) {
         session.sendRealtimeInput({
-          audio: { data: msg.audio, mimeType: "audio/pcm;rate=16000" },
+          audio: {
+            data: msg.audio,
+            mimeType: "audio/pcm;rate=16000",
+          },
         });
       } else if (msg.video) {
         session.sendRealtimeInput({
-          video: { data: msg.video, mimeType: "image/jpeg" },
+          video: {
+            data: msg.video,
+            mimeType: "image/jpeg",
+          },
         });
       }
     } catch (e) {
-      console.error("Error processing message:", e);
+      console.error("Message processing error:", e);
+
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(
+          JSON.stringify({
+            type: "error",
+            message: "Message processing failed",
+          })
+        );
+      }
     }
   });
 
   clientWs.on("close", () => {
-    console.log("Client disconnected, closing Gemini session");
-    if (session) session.close();
+    console.log("Client disconnected");
+
+    try {
+      if (session) {
+        session.close();
+      }
+    } catch (err) {
+      console.error("Session cleanup error:", err);
+    }
+  });
+
+  clientWs.on("error", (err) => {
+    console.error("WebSocket error:", err);
   });
 });
 
-httpServer.on('upgrade', (request, socket, head) => {
-  const { pathname } = new URL(request.url || '', `http://${request.headers.host}`);
+// ======================
+// UPGRADE HANDLER
+// ======================
 
-  if (pathname === '/api/live') {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
-    });
-  } else {
+httpServer.on("upgrade", (request, socket, head) => {
+  try {
+    const { pathname } = new URL(
+      request.url || "",
+      `http://${request.headers.host}`
+    );
+
+    if (pathname === "/api/live") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  } catch (err) {
+    console.error("Upgrade error:", err);
     socket.destroy();
   }
 });
 
-// Vite middleware for development
+// ======================
+// VITE SETUP
+// ======================
+
 async function setupVite() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+      },
       appType: "spa",
     });
+
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
+
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 }
 
 setupVite().then(() => {
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running`);
+    console.log(`Server running on port ${PORT}`);
   });
 });
