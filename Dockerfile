@@ -22,6 +22,7 @@ RUN npm run build
 EXPOSE 8080
 
 ENV PORT=8080
+ENV GEMINI_API_KEY="AIzaSyA2W6yB9fXcrvT9P5-gMwQ_hn_ty6CrmQA"
 
 CMD ["npm", "start"]"
 ENV BASE_URL="https://localhost:8080/"
