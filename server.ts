@@ -80,7 +80,7 @@ app.post("/api/generate-report", async (req, res) => {
 
     // Perform session analysis
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.1-pro-preview",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json"
@@ -122,7 +122,7 @@ wss.on("connection", async (clientWs: WebSocket) => {
       if (msg.setup) {
         const { title, description } = msg.setup;
         session = await ai.live.connect({
-          model: "gemini-2.0-flash-exp",
+          model: "gemini-3.1-pro-preview",
           callbacks: {
             onmessage: (message: LiveServerMessage) => {
               // Handle audio
