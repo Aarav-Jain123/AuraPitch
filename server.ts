@@ -11,11 +11,6 @@ app.use(express.json());
 
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 8080;
-
-// ======================
-// GEMINI CONFIG
-// ======================
-
 export function getGeminiKey(): string {
   const key = process.env.GEMINI_API_KEY || geminiKEY;
 
@@ -36,9 +31,6 @@ const getGenAI = () => {
   }
 };
 
-// ======================
-// REPORT ENDPOINT
-// ======================
 
 app.post("/api/generate-report", async (req, res) => {
   try {
@@ -115,10 +107,6 @@ app.post("/api/generate-report", async (req, res) => {
   }
 });
 
-// ======================
-// WEBSOCKET
-// ======================
-
 const wss = new WebSocketServer({ noServer: true });
 
 wss.on("connection", async (clientWs: WebSocket) => {
@@ -145,10 +133,6 @@ wss.on("connection", async (clientWs: WebSocket) => {
   clientWs.on("message", async (data) => {
     try {
       const msg = JSON.parse(data.toString());
-
-      // ======================
-      // SESSION INIT
-      // ======================
 
       if (msg.setup) {
         const { title, description } = msg.setup;
@@ -311,10 +295,6 @@ Keep live interventions under 8 seconds.
         return;
       }
 
-      // ======================
-      // STREAM INPUTS
-      // ======================
-
       if (!session) return;
 
       if (msg.audio) {
@@ -363,10 +343,6 @@ Keep live interventions under 8 seconds.
   });
 });
 
-// ======================
-// UPGRADE HANDLER
-// ======================
-
 httpServer.on("upgrade", (request, socket, head) => {
   try {
     const { pathname } = new URL(
@@ -387,9 +363,6 @@ httpServer.on("upgrade", (request, socket, head) => {
   }
 });
 
-// ======================
-// VITE SETUP
-// ======================
 
 async function setupVite() {
   if (process.env.NODE_ENV !== "production") {
